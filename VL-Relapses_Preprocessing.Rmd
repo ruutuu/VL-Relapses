@@ -6,14 +6,12 @@ output:
 
 PRE-PROCESSING THE FINAL DATASET FOR ANALYSIS:
 
-I)Creating drug classes, follow up duration related variables.
-II) Adding residuals to 0 event studies
-III) Filtering out studies:
-  1. Removing HIV co-infection based studies
-  2. Missing info
-  3. < 6month follow-up
-  4. Unpublished (already removed)
+1. Adding all necessary variables from different data sources
+2. Creating drug classes, relapse measurement time variable, relpase_180, relapse_360
+3. Filtering out studies: Only excluded studies
+ 
 
+#1. Compliling all variables
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 require(RCurl)
 library('googlesheets4')
@@ -111,7 +109,7 @@ df<-subset(data_all,data_all$`Inc/Excluded`=="Inc")
 length(unique(df$pub_id))
 #131 left
 ```
-Drug classifications: Main variable created for analysis: drugcat
+#3. Drug classifications: Main variable created for analysis: drugcat
 ```{r}
 #Single drug or combination therapy. mono=1 for single drug
 df$mono<-ifelse(is.na(df$sa_intv2_drug),1,0)
@@ -153,6 +151,7 @@ drugcatlist<-unique(df$drugcat)
 
 ```
 
+#4. Relapse related variables
 
 ```{r}
 
@@ -171,6 +170,7 @@ df$relapse_360<-ifelse(df$relapse_match=="12monthinfo",df$relapse_12m,
                                                   ifelse(df$relapse_match=="6-12monthinfo",df$relapse_12m,NA))
 ```
 
+#5. Variable type conversions
 
 ```{r}
 #Converting to factors, changing group names.
@@ -179,19 +179,15 @@ df$cases_grouped<-as.factor(df$cases_grouped)
 df$cases_grouped[is.na(df$cases_grouped)]<-"Unclear"
 df$severe_ka_included[is.na(df$severe_ka_included)]<-"Unclear"
 df$relapse_method_for_analysis<-as.factor(df$relapse_method_for_analysis)
-
-
-df$failures<-df$sa_num_tx-df$initial_cure
 df[,c("number_of_deaths","n_SAEs")]<-sapply(df[,c("number_of_deaths","n_SAEs")], as.numeric)
 df<-as.data.frame(df)
 
 ```
 
-
+#6. Final Variable selection
 ```{r}
 
-#Checking how many with rmt180 and rmt360==0
- 
+
 df_final<-df[,c('id','pub_id','st_region','drugcat', "sa_int1_total_dose",
                       "st_total_num",'sa_num_tx',"relapse_measurement_time",'initial_cure','relapse_180','relapse_360',
                       'cases_grouped','severe_ka_included','relapse_method_for_analysis', 'pub_year')]
