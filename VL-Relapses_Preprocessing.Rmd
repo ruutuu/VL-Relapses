@@ -38,9 +38,9 @@ setwd("C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/
 #Continuous changes to the file: Missing numbers, corrections
 #Pick up latest cleaned file from Google Sheets
 #Download it and save the sheet. Read it here-->
-data <-read_excel("VL_RelapseDataset_Review_1March.xlsx", sheet = "AllStudies")
+data <-read_excel("VL_Relapse_Dataset_24March.xlsx", sheet = "AllStudies")
 
-data<-data[,c("pub_id", "Inc/Excluded" ,"redcap_repeat_instance",  "pub_year" , "st_region" ,"st_total_num" ,
+data<-data[,c("pub_id", "Inc/Excluded" ,"redcap_repeat_instance",  "pub_year" , "st_region" ,"st_total_num" ,"st_allocation",
                  "sa_intv1_drug" , "sa_intv1_dose_mgkg"  ,"sa_intv1_freq_discrete" ,  "sa_intv1_freq_new" , "sa_intv1_dura", "sa_int1_total_dose", 
                   "sa_intv2_drug" ,  "sa_intv2_dose_mgkg" , "sa_intv2_freq_discrete" ,  "sa_intv2_dura" ,
                    "sa_num_tx", "eff_arm_icure_num" , "eff_arm_relapse_num" ,  "me_hiv_yn",  
@@ -190,9 +190,18 @@ df<-as.data.frame(df)
 
 df_final<-df[,c('id','pub_id','st_region','drugcat', "sa_int1_total_dose",
                       "st_total_num",'sa_num_tx',"relapse_measurement_time",'initial_cure','relapse_180','relapse_360',
-                      'cases_grouped','severe_ka_included','relapse_method_for_analysis', 'pub_year')]
+                      'cases_grouped','severe_ka_included','relapse_method_for_analysis', 'pub_year','st_allocation')]
 
 
+
+df_final$decade<-ifelse(df_final$pub_year<1990,"80s",ifelse(df_final$pub_year<2000,"90s",ifelse(df_final$pub_year<2010,"00s","10s")))
+df_final$st_type<-ifelse(df_final$st_allocation=="Randomised","R","NR")
+df_final$st_allocation<-NULL
+colnames(df_final)[colnames(df_final) == "relapse_method_for_analysis"] ="rel_diag"
+colnames(df_final)[colnames(df_final) == "cases_grouped"] ="inf_type"
+length(unique(df_final$pub_id))
+
+df_final<-subset(df_final,df_final$initial_cure>0)
 setwd("C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/Data")
 saveRDS(df_final,'VLRelapse_Dataset.RDS')
 
