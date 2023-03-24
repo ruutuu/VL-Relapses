@@ -1,0 +1,268 @@
+Analysis and results:
+
+#1. Initialization: Loading libraries, functions and data
+```{r message=FALSE, warning=FALSE, include=FALSE}
+    library(readr)
+    library(readxl)
+# meta-analysis packages
+    library(meta)
+    library(metafor)
+    library(metasens) 
+# graphics packages
+    library(tidyverse)
+    library(reshape)
+    library(doBy)
+    library(stringr)
+    library(ggpubr)
+    library(patchwork)
+    library(dplyr)
+    library(data.table)
+
+
+source("C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/MA_extract_functions.R")
+
+df<-readRDS('C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/Data/VLRelapse_Dataset.RDS') #Make sure to pick up the latest data file
+
+df$decade<-ifelse(df$pub_year<1990,"80s",ifelse(df$pub_year<2000,"90s",ifelse(df$pub_year<2010,"00s","10s")))
+df$st_type<-ifelse(df$st_allocation=="Randomised","R","NR")
+df$st_allocation<-NULL
+colnames(df)[colnames(df) == "relapse_method_for_analysis"] ="rel_diag"
+colnames(df)[colnames(df) == "cases_grouped"] ="inf_type"
+length(unique(df$pub_id))
+df<-subset(df,df$initial_cure>0)
+
+df_ea<-subset(df,df$st_region=="Eastern Africa")
+table3<-NULL
+bias_pval<-NULL
+
+```
+
+
+#Table 2.
+##1. By drug regimen
+
+```{r include=FALSE}
+#1.3: By drug
+drug<-unique(df_ea$drugcat)
+#Carrying meta analysis for all regions nad storing them in mr1, mr2...
+for (i in 1:6){
+    df_ea_tmp<-subset(df_ea, df_ea$drugcat== drug[i])
+          m_tmp<- metaprop(data = df_ea_tmp,  event =relapse_180,  n=initial_cure, 
+                           method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+               bias<-metabias(m_tmp,method.bias = "Egger",k.min=5)
+               assign(paste0("m_drug",i),m_tmp)
+               bias_pval<-rbind(bias_pval,c(drug[i],bias$p.value))
+               rm(bias,m_tmp,df_ea_tmp)
+               }
+               
+
+
+m_adj<-copas(m_drug1, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od1<-m_extract(m_adj,cat_name)
+rm(m_adj)
+
+m_adj<-copas(m_drug2, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od2<-m_extract(m_adj,cat_name)
+rm(m_adj)
+
+
+m_adj<-copas(m_drug3, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od3<-m_extract(m_adj,cat_name)
+rm(m_adj)
+
+
+m_adj<-copas(m_drug4, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od4<-m_extract(m_adj,cat_name)
+rm(m_adj)
+
+
+m_unadj<-m_drug5
+cat_name=m_unadj$data$drugcat[1]
+od5<-m_extract0(m_unadj,cat_name)
+rm(m_unadj)
+metabias(m_drug5,method.bias = "Egger")
+
+m_unadj<-m_drug6
+cat_name=m_unadj$data$drugcat[1]
+od6<-m_extract0(m_unadj,cat_name)
+rm(m_unadj)
+
+
+table3<-rbind(table3, od1, od2, od3, od4,od5,  od6)
+rm(m_drug1, m_drug2, m_drug3, m_drug4, m_drug5, m_drug6)
+
+rm(od1, od2, od3, od4, od5, od6)
+#Drug 16& 17: No. of studies too low
+```
+
+##2. By Infection type/case type
+
+```{r include=FALSE}
+
+#By Relapse method
+casemix<-unique(as.character(df_ea$inf_type))
+
+for (i in 1:2){
+  cm<-casemix[i]
+   df_ea_tmp<-subset(df_ea,df_ea$inf_type==cm)
+              m_tmp<- metaprop(data = df_ea_tmp,  event =relapse_180,  n=initial_cure, 
+                           method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+              
+               bias<-metabias(m_tmp,method.bias = "Egger",k.min=5)
+               bias_pval<-rbind(bias_pval,c(rel,bias$p.value))
+               
+               assign(paste0("m_case",i),m_tmp)
+               rm(m_tmp,df_ea_tmp,bias)}
+
+
+
+
+m_adj<-copas(m_case1, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$inf_type[1]
+ocase1<-m_extract(m_adj,cat_name)
+rm(m_adj)
+
+
+
+m_adj<-copas(m_case2, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$inf_type[1]
+ocase2<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_case2,method.bias = "Egger",k.min=5)
+
+table3<-rbind(table3, ocase1, ocase2)
+rm(m_case1, m_case2)
+rm(ocase1, ocase2)
+
+```
+
+
+##3. By Relapse diagnosis method
+
+```{r}
+
+relapsediagmethod<-unique(as.character(df_ea$rel_diag))
+#Carrying meta analysis for all regions and storing them in mr1, mr2...
+for (i in 1:2){
+  
+               rel<-relapsediagmethod[i]
+               df_ea_tmp<-subset(df_ea,df_ea$rel_diag==rel)
+
+               m_tmp<- metaprop(data = df_ea_tmp,  
+                                   event =relapse_180,  n=initial_cure, 
+                                   method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+               
+               bias<-metabias(m_tmp,method.bias = "Egger",k.min=5)
+               bias_pval<-rbind(bias_pval,c(rel,bias$p.value))
+               
+               assign(paste0("m_rel",i),m_tmp)
+               rm(bias,m_tmp,df_ea_tmp)}
+
+
+
+
+m_adj<-copas(m_rel1, gamma0.range=c(-2,5), gamma1.range=c(-1,2))
+m_adj
+cat_name=m_adj$x$data$rel_diag[1]
+orel1<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_rel1,method.bias = "Egger")
+
+
+
+m_unadj<-m_rel2
+cat_name=m_unadj$data$rel_diag[1]
+orel2<-m_extract0(m_unadj,cat_name)
+rm(m_unadj)
+
+
+table3<-rbind(table3, orel1, orel2)
+rm(m_rel1, m_rel2)
+rm(orel1, orel2)
+```
+
+##4. By decade
+```{r}
+ 
+decade<-unique(df_ea$decade)
+
+for (i in 1:4){
+              dec<-decade[i]
+              df_ea_tmp<-subset(df_ea,df_ea$decade==dec)
+           
+              m_tmp<- metaprop(data = df_ea_tmp,  
+                               event =relapse_180,  n=initial_cure, 
+                               method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+               
+               
+               bias<-metabias(m_tmp,method.bias = "Egger",k.min=5)
+               bias_pval<-rbind(bias_pval,c(dec,bias$p.value))
+               
+               assign(paste0("m_dec",i),m_tmp)
+               rm(m_tmp,df_tmp,bias)}
+
+
+
+m_adj<-copas(m_dec1, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+catname=m_adj$x$data$decade[1]
+odec1<-m_extract(m_adj,catname)
+rm(m_adj)
+
+m_adj<-copas(m_dec2, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+catname=m_adj$x$data$decade[1]
+odec2<-m_extract(m_adj,catname)
+rm(m_adj)
+
+
+m_adj<-copas(m_dec3, gamma0.range=c(-2,5), gamma1.range=c(-3,3))
+m_adj
+catname=m_adj$x$data$decade[1]
+odec3<-m_extract(m_adj,catname)
+rm(m_adj)
+
+
+m_adj<-copas(m_dec4, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+catname=m_adj$x$data$decade[1]
+odec4<-m_extract(m_adj,catname)
+rm(m_adj)
+
+
+
+table3<-rbind(table3, odec1, odec2, odec3, odec4)
+rm(m_dec1, m_dec2, m_dec3, m_dec4)
+rm(odec1, odec2, odec3, odec4)
+
+```
+
+##5 Final table creation
+```{r}
+
+cols.num <- c( "est0","lb0","ub0","est","lb","ub","i2","i2lb","i2ub","pi_lb","pi_ub")
+table3[cols.num] <- sapply(table3[cols.num],as.numeric)
+table3[, cols.num] <- lapply(table3[, cols.num, drop = FALSE],  function(x) x * 100)
+
+table3[, cols.num] <- lapply(table3[, cols.num, drop = FALSE],
+                             function(x) round(x,1))
+
+
+table3$unadj<-with(table3,paste0(est0,"% [95% CI: ",lb0,"%-",ub0,"%]"))
+table3$adj<-with(table3,paste0(est,"% [95% CI: ",lb,"%-",ub,"%]"))
+table3$pred<-with(table3,paste0(pi_lb,"% - ",pi_ub,"%"))
+table3$tcr<-with(table3,paste0(tot,"/",cured,"/",relapse))
+
+table3<-table3[,c("name","arms","tcr","unadj","tausq","i2","adj","pred")]
+
+```
