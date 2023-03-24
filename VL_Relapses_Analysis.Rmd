@@ -1,0 +1,710 @@
+Analysis and results:
+
+#1. Initialization: Loading libraries, functions and data
+```{r message=FALSE, warning=FALSE, include=FALSE}
+    library(readr)
+    library(readxl)
+# meta-analysis packages
+    library(meta)
+    library(metafor)
+    library(metasens) 
+# graphics packages
+    library(tidyverse)
+    library(reshape)
+    library(doBy)
+    library(stringr)
+    library(ggpubr)
+    library(patchwork)
+    library(dplyr)
+    library(data.table)
+
+
+source("C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/MA_extract_functions.R")
+
+df<-readRDS('C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/Data/VLRelapse_Dataset.RDS') #Make sure to pick up the latest data file
+
+df$decade<-ifelse(df$pub_year<1990,"80s",ifelse(df$pub_year<2000,"90s",ifelse(df$pub_year<2010,"00s","10s")))
+df$st_type<-ifelse(df$st_allocation=="Randomised","R","NR")
+df$st_allocation<-NULL
+colnames(df)[colnames(df) == "relapse_method_for_analysis"] ="rel_diag"
+colnames(df)[colnames(df) == "cases_grouped"] ="inf_type"
+length(unique(df$pub_id))
+
+df<-subset(df,df$initial_cure>0)
+```
+
+#2. General descriptive stats
+1.	No. of studies by region and %
+2.	No. of studies by follow-up duration, % (6 & 12)
+3.	No. of studies by Relapse diagnosis method
+4.	Total drug regimen and major ones
+
+```{r}
+#1.	No. of studies by region and %
+df %>% group_by(st_region) %>%summarise(pub_count= n_distinct(pub_id))
+df %>% group_by(st_region) %>%summarise(pub_prop= n_distinct(pub_id)/(0.01*length(unique(df$pub_id))))
+df %>% group_by(st_region) %>%summarise(arm_count= n_distinct(id))  
+
+#2.	No. of studies by follow-up duration, % (6 & 12)
+df %>% group_by(relapse_measurement_time) %>%summarise(count= n_distinct(pub_id))
+#Study 82 is double counted as 1 arm had follow-up till 6 months nad on e till 12 months.
+
+#3.	No. of studies by Relapse diagnosis method
+df %>% group_by(rel_diag) %>%summarise(pub_count= n_distinct(pub_id))
+df %>% group_by(rel_diag) %>%summarise(pub_prop= n_distinct(pub_id)/(0.01*length(unique(df$pub_id))))
+
+#By infection
+df %>% group_by(inf_type) %>%summarise(pub_count= n_distinct(pub_id))
+df %>% group_by(inf_type) %>%summarise(pub_prop= n_distinct(pub_id)/(0.01*length(unique(df$pub_id))))
+
+```
+
+a) Please add Tau-squared (or Tau) in addition to I-squared statistics, b) Please present 95% prediction intervals, and 3) Use Hartung-Knapp method for the estimation of random effects, and finally, 4) Only use random effects meta analysis, when there is at least 5 studies (i.e. 5 arms in our case). If there are <5 arms, then we present data from Fixed effect analysis
+
+a) Present Tau-squared (or Tau) (in addition to I-squared), b) also estimate 95% prediction intervals when possible, and 3) Use Hartung-Knapp method for estimation of Tau-squared for the random effects meta-analyses instead of the Inverse Variance/DerSimonian + Laird's method
+
+#3. Table 1: Estimates overall & by subgroups
+
+##1) Overall
+```{r include=FALSE}
+#1. Overall estimate at 6 months and overall 
+bias_pval<-NULL
+cat_name<-"Overall-6m"
+m<- metaprop(  data = df,  event =relapse_180,  n= initial_cure, method='GLMM',  sm = "PLOGIT",  hakn = TRUE, prediction=TRUE)
+summary(m)
+
+bias<-metabias(m,method.bias = "Egger")
+m_adj<-copas(m, gamma0.range=c(-2,5), gamma1.range=c(-1,2))
+overall_est<-m_extract(m_adj,cat_name)
+bias_pval<-rbind(bias_pval,c(cat_name,bias$pval))
+bias_pval<-as.data.frame(bias_pval)
+table1<-overall_est
+rm(m,m_adj,bias, overall_est)
+```
+
+##2) By region
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+#1.2: By region at 6 months
+region<-unique(df$st_region)
+
+
+#Carrying meta analysis for all regions and storing them in mr1, mr2...
+for (i in 1:6){
+  df_tmp<-subset(df,df$st_region==region[i])
+               m_tmp<- metaprop(data = df_tmp,  event =relapse_180,  n=initial_cure,  
+                                method="GLMM",sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+               assign(paste0("m_reg",i),m_tmp)}
+
+rm(m_tmp,df_tmp)
+
+
+m_adj<-copas(m_reg1, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+cat_name=m_adj$x$data$st_region[1]
+or1<-m_extract(m_adj,cat_name)
+pv<-metabias(m_reg1,method.bias = "Egger")
+bias_pval<-rbind(bias_pval,c(cat_name,pv$p.value))
+rm(pv)
+#p-value = 0.0004
+
+m_adj<-copas(m_reg2, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+cat_name=m_adj$x$data$st_region[1]
+or2<-m_extract(m_adj,cat_name)
+pv<-metabias(m_reg2,method.bias = "Egger",k.min = 5)
+bias_pval<-rbind(bias_pval,c(cat_name,pv$p.value))
+rm(pv)
+#p=0.11
+
+
+m_adj<-copas(m_reg3, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+#m_unadj<-m_reg3
+cat_name=m_adj$data$st_region[1]
+or3<-m_extract(m_adj,cat_name)
+pv<-metabias(m_reg3,method.bias = "Egger")
+bias_pval<-rbind(bias_pval,c(cat_name,pv$p.value))
+rm(pv)
+# p-value = 0.339
+cat_name=m_adj$x$data$st_region[1]
+or3<-m_extract(m_adj,cat_name)
+metabias(m_reg3,method.bias = "Egger")
+
+###
+
+m_adj<-copas(m_reg4, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+cat_name=m_adj$x$data$st_region[1]
+or4<-m_extract(m_adj,cat_name)
+pv<-metabias(m_reg4,method.bias = "Egger",k.min=5)
+bias_pval<-rbind(bias_pval,c(cat_name,pv$p.value))
+rm(pv)
+#0.038
+
+m_adj<-copas(m_reg5, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+cat_name=m_adj$x$data$st_region[1]
+or5<-m_extract(m_adj,cat_name)
+pv<-metabias(m_reg5,method.bias = "Egger",k.min=5)
+bias_pval<-rbind(bias_pval,c(cat_name,pv$p.value))
+rm(pv)
+# p=0.33
+
+
+m_adj<-copas(m_reg6, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+cat_name=m_adj$x$data$st_region[1]
+or6<-m_extract(m_adj,cat_name)
+pv<-metabias(m_reg6,method.bias = "Egger",k.min=5)
+bias_pval<-rbind(bias_pval,c(cat_name,pv$p.value))
+rm(pv)
+# (k=7) too small to test for small study effects
+
+table1<-rbind(table1, or1, or2,or3, or4, or5, or6)
+rm(or1,or2,or3, or4, or5, or6)
+rm(m_reg1, m_reg2, m_reg3, m_reg4, m_reg5, m_reg6)
+rm(m_adj, m)
+```
+
+
+
+
+##3) By drug regimen
+```{r include=FALSE}
+#1.3: By drug
+drug<-unique(df$drugcat)
+#Carrying meta analysis for all regions nad storing them in mr1, mr2...
+for (i in 1:17){
+    df_tmp<-subset(df, df$drugcat== drug[i])
+          m_tmp<- metaprop(data = df_tmp,  event =relapse_180,  n=initial_cure, 
+                           method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+               bias<-metabias(m_tmp,method.bias = "Egger",k.min=5)
+               assign(paste0("m_drug",i),m_tmp)
+               bias_pval<-rbind(bias_pval,c(drug[i],bias$p.value))
+               rm(bias,m_tmp,df_tmp)
+               }
+               
+
+
+m_adj<-copas(m_drug1, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od1<-m_extract(m_adj,cat_name)
+metabias(m_drug1,method.bias = "Egger")
+# k small
+
+
+m_adj<-copas(m_drug2, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od2<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_drug2,method.bias = "Egger")
+# p-value = 0.0815
+
+
+m_adj<-copas(m_drug3, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od3<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_drug3,method.bias = "Egger")
+# p-value = 0.8776
+
+
+
+m_adj<-copas(m_drug4, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od4<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_drug4,method.bias = "Egger",k.min=5)
+# p-value = k=9 too small
+
+
+#m_adj<-copas(m_drug5, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+#m_unadj<-m_drug5
+#cat_name=m_unadj$data$drugcat[1]
+#od5<-m_extract0(m_unadj,cat_name)
+#rm(m_unadj)
+#metabias(m_drug5,method.bias = "Egger")
+
+m_adj<-copas(m_drug5, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od5<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_drug5,method.bias = "Egger")
+
+
+m_adj<-copas(m_drug6, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od6<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_drug6,method.bias = "Egger")
+# p-value = 0.0053
+
+
+
+m_adj<-copas(m_drug7, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od7<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_drug7,method.bias = "Egger")
+# p-value = k small
+
+
+
+m_adj<-copas(m_drug8, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od8<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_drug8,method.bias = "Egger")
+# p-value = 0.229
+
+
+m_adj<-copas(m_drug9, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od9<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_drug9,method.bias = "Egger")
+# p-value = 0.0028
+
+
+m_adj<-copas(m_drug10, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od10<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_drug10,method.bias = "Egger")
+# p-value =  0.7672
+
+
+
+m_adj<-copas(m_drug11, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od11<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_drug11,method.bias = "Egger")
+# p-value =  k small
+
+
+m_adj<-copas(m_drug12, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od12<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_drug12,method.bias = "Egger", k.min=5)
+# p-value =  k small
+
+m_adj<-copas(m_drug13, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od13<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_drug13,method.bias = "Egger")
+# p-value =  0.34
+
+
+m_adj<-copas(m_drug14, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od14<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_drug14,method.bias = "Egger")
+# p-value = k small
+
+m_adj<-copas(m_drug15, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$drugcat[1]
+od15<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_drug15,method.bias = "Egger")
+# p-value =  0.94
+
+#m_adj<-copas(m_drug5, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_unadj<-m_drug17
+cat_name=m_unadj$data$drugcat[1]
+od17<-m_extract0(m_unadj,cat_name)
+rm(m_unadj)
+metabias(m_drug17,method.bias = "Egger")
+# p-value = k small
+
+table1<-rbind(table1, od1, od2, od3, od4,od5,  od6, od7, od8, od9, od10, od11, od12, od13, od14, od15, od17)
+rm(m_drug1, m_drug2, m_drug3, m_drug4, m_drug5, m_drug6, m_drug7, m_drug8, m_drug9, m_drug10, m_drug11, m_drug12, m_drug13, m_drug14, m_drug16,m_drug17, m_drug15,  m_drug17)
+
+rm(od1, od2, od3, od4, od5, od6, od7, od8, od9, od10, od11, od12, od13, od14, od15, od17)
+#Drug 16& 17: No. of studies too low
+```
+
+
+##4) Relapse diagnosis method
+
+```{r include=FALSE}
+#1.3: Relapse Diagnosis Method
+
+relapsediagmethod<-unique(as.character(df$rel_diag))
+#Carrying meta analysis for all regions and storing them in mr1, mr2...
+for (i in 1:4){
+   rel<-relapsediagmethod[i]
+   df_tmp<-subset(df,df$rel_diag==rel)
+               m_tmp<- metaprop(data = df_tmp,  event =relapse_180,  n=initial_cure, 
+                           method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+               bias<-metabias(m_tmp,method.bias = "Egger",k.min=5)
+               
+               bias_pval<-rbind(bias_pval,c(rel,bias$p.value))
+               assign(paste0("m_rel",i),m_tmp)
+
+               rm(bias,m_tmp)}
+
+
+
+m_adj<-copas(m_rel1, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$rel_diag[1]
+orel1<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_rel1,method.bias = "Egger")
+# p-value < 0.0001
+
+
+m_adj<-copas(m_rel2, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$rel_diag[1]
+orel2<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_rel2,method.bias = "Egger")
+# p-value =0.148
+
+
+m_adj<-copas(m_rel3, gamma0.range=c(-2,5), gamma1.range=c(-3,3))
+m_adj
+cat_name=m_adj$x$data$rel_diag[1]
+orel3<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_rel3,method.bias = "Egger", k.min=5)
+
+#Value changes a lot with gamma0! ( 4 to 5)
+
+
+#m_adj<-copas(m_rel4, gamma0.range=c(-1,5), gamma1.range=c(0,3))
+#Only 2 arms (1 study) with molecular diagnostic method
+m_unadj<-m_rel4
+cat_name=m_unadj$data$rel_diag[1]
+orel4<-m_extract0(m_unadj,cat_name)
+rm(m_unadj)
+
+
+table1<-rbind(table1, orel1, orel2, orel3, orel4)
+rm(m_rel1, m_rel2, m_rel3, m_rel4)
+rm(orel1, orel2, orel3, orel4)
+rm(relapsediagmethod)
+```
+
+
+
+
+##5) Infection type
+
+```{r include=FALSE}
+casemix<-unique(as.character(df$inf_type))
+
+for (i in 1:4){
+  cm<-casemix[i]
+   df_tmp<-subset(df,df$inf_type==cm)
+              m_tmp<- metaprop(data = df_tmp,  event =relapse_180,  n=initial_cure, 
+                           method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+              
+               bias<-metabias(m_tmp,method.bias = "Egger",k.min=5)
+               bias_pval<-rbind(bias_pval,c(rel,bias$p.value))
+               
+               assign(paste0("m_case",i),m_tmp)
+               rm(m_tmp,df_tmp,bias)}
+
+
+
+m_adj<-copas(m_case1, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$inf_type[1]
+ocase1<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_case1,method.bias = "Egger")
+cat_name
+# p-value = 0.0002
+
+
+
+m_adj<-copas(m_case2, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$inf_type[1]
+ocase2<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_case2,method.bias = "Egger")
+cat_name
+
+# p-value <0.001
+
+
+m_adj<-copas(m_case3, gamma0.range=c(-2,5), gamma1.range=c(-3,3))
+m_adj
+cat_name=m_adj$x$data$inf_type[1]
+ocase3<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_case3,method.bias = "Egger")
+cat_name
+
+#p=0.02
+m_adj<-copas(m_case4, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$inf_type[1]
+ocase4<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_case4,method.bias = "Egger")
+cat_name
+
+# p-value = 0.85
+
+
+table1<-rbind(table1, ocase1, ocase2, ocase3, ocase4)
+rm(m_case1, m_case2, m_case3, m_case4)
+rm(ocase1, ocase2, ocase3, ocase4)
+
+
+
+#Exploring unresponsive VL cases:
+
+df1<-subset(df, df$inf_type=="Unresponsive VL")
+```
+
+
+
+##6) Decade
+
+```{r include=FALSE}
+
+m<- metaprop(data=df,event =relapse_180,  n=initial_cure, 
+                           method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+
+m_decade<-update.meta(m, 
+            byvar=decade, 
+            comb.random = TRUE, 
+            comb.fixed = F)
+
+
+#p=0.0037
+decade<-unique(df$decade)
+
+for (i in 1:4){
+ dec<-decade[i]
+   df_tmp<-subset(df,df$decade==dec)
+               m_tmp<- metaprop(data = df_tmp,  event =relapse_180,  n=initial_cure, 
+                           method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+               assign(paste0("m_dec",i),m_tmp)
+               bias<-metabias(m_tmp,method.bias = "Egger",k.min=5)
+               bias_pval<-rbind(bias_pval,c(dec,bias$p.value))
+               
+               rm(m_tmp,df_tmp,bias)}
+
+
+
+m_adj<-copas(m_dec1, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$decade[1]
+odec1<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_dec1,method.bias = "Egger")
+# p-value = 0.064
+
+
+
+m_adj<-copas(m_dec2, gamma0.range=c(-3,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$decade[1]
+odec2<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_dec2,method.bias = "Egger")
+# p-value < 0.0001
+
+
+m_adj<-copas(m_dec3, gamma0.range=c(-2,5), gamma1.range=c(-3,3))
+m_adj
+cat_name=m_adj$x$data$decade[1]
+odec3<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_dec3,method.bias = "Egger")
+# p-value = 0.0037
+
+#Value changes a lot with gamma0! ( 4 to 5)
+
+m_adj<-copas(m_dec4, gamma0.range=c(-3,5), gamma1.range=c(0,2))
+m_adj
+cat_name=m_adj$x$data$decade[1]
+odec4<-m_extract(m_adj,cat_name)
+rm(m_adj)
+metabias(m_dec4,method.bias = "Egger")
+# p-value = 0.0014
+
+
+table1<-rbind(table1, odec1, odec2, odec3, odec4)
+rm(m_dec1, m_dec2, m_dec3, m_dec4)
+rm(odec1, odec2, odec3, odec4)
+
+```
+
+
+
+#4. Table 1: 6 month vs 12 month
+Focus on 19 studies with follow up duration of more than 6 months
+(make changes to Study #11)
+
+```{r}
+df_12mfu<-subset(df,!is.na(df$relapse_360))
+#or remove 180-360 studies? (8 arms)
+length(unique(df_12mfu$pub_id))
+
+df_12mfu$relapse_total<-df_12mfu$relapse_180+df_12mfu$relapse_360
+
+m_overall<- metaprop(data =df_12mfu,event =relapse_total,  n=initial_cure, 
+                           method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+
+m_360<- metaprop(data =df_12mfu,event =relapse_360,  n=initial_cure, 
+                           method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+
+m_180<- metaprop(data =df_12mfu,event =relapse_180,  n=initial_cure, 
+                           method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+
+
+
+m_adj<-copas(m_overall, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+metabias(m_overall,method.bias = "Egger")
+cat_name<-"Long FU Overall"
+o1<-m_extract(m_adj,cat_name)
+
+
+m_adj<-copas(m_360, gamma0.range=c(-3,6), gamma1.range=c(-1,3))
+m_adj
+metabias(m_360,method.bias = "Egger")
+cat_name<-"Long FU 12m"
+o2<-m_extract(m_adj,cat_name)
+
+m_adj<-copas(m_180, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+metabias(m_180,method.bias = "Egger")
+cat_name<-"Long FU 6m"
+o3<-m_extract(m_adj,cat_name)
+
+results_6vs12<-rbind(o1,o2,o3)
+
+events1<-df_12mfu %>% 
+  dplyr::summarise(
+    n_studies 	= length(unique(pub_id)),
+    n_event	= sum(relapse_total, na.rm = TRUE), 
+    n_cured	= sum(initial_cure),
+    n_totfu= sum(sa_num_tx))
+
+events2<-df_12mfu %>% 
+  dplyr::summarise(
+    n_studies 	= length(unique(pub_id)),
+    n_event	= sum(relapse_360, na.rm = TRUE), 
+    n_cured	= sum(initial_cure),
+    n_totfu= sum(sa_num_tx))
+
+events3<-df_12mfu %>% 
+  dplyr::summarise(
+    n_studies 	= length(unique(pub_id)),
+    n_event	= sum(relapse_180, na.rm = TRUE), 
+    n_cured	= sum(initial_cure),
+    n_totfu= sum(sa_num_tx))
+
+n_event<-c(events2[1,2], events1[1,2],events3[1,2])
+results_6vs12$relapse<-n_event
+table1<-rbind(table1,results_6vs12)
+
+```
+
+#5. Table 1 formatting
+```{r}
+
+cols.num <- c( "est0","lb0","ub0","est","lb","ub","i2","i2lb","i2ub","pi_lb","pi_ub")
+table1[cols.num] <- sapply(table1[cols.num],as.numeric)
+table1[, cols.num] <- lapply(table1[, cols.num, drop = FALSE],  function(x) x * 100)
+
+table1[, cols.num] <- lapply(table1[, cols.num, drop = FALSE],
+                             function(x) round(x,1))
+
+
+table1$unadj<-with(table1,paste0(est0,"% [95% CI: ",lb0,"%-",ub0,"%]"))
+table1$adj<-with(table1,paste0(est,"% [95% CI: ",lb,"%-",ub,"%]"))
+table1$pred<-with(table1,paste0(pi_lb,"% - ",pi_ub,"%"))
+table1$tcr<-with(table1,paste0(tot,"/",cured,"/",relapse))
+
+table1<-table1[,c("name","arms","tcr","unadj","tausq","i2","adj","pred")]
+
+#write.csv(t,'table4_0815.csv')
+
+```
+
+#6. Table 4: Longer follow-up studies
+
+```{r}
+library(tidyr)
+library(readr)
+library(tidyselect)
+
+library(tidyverse)
+library(reshape)
+library(doBy)
+library(stringr)
+library(ggpubr)
+library(patchwork)
+library(dplyr)
+library(data.table)
+
+studies12m<- df_12mfu %>% group_by(pub_id) %>% 
+                summarise(n_treated=sum(sa_num_tx), initial_cure=sum(initial_cure),  
+                          relapse_total = sum(relapse_total),relapse_180=sum(relapse_180),relapse_360=sum(relapse_360))
+
+
+studies12m$prop_180<-round((studies12m$relapse_180/studies12m$initial_cure),2)
+# calculate the confidence interval for the proportion
+studies12m$ci_180_lower <- apply(studies12m, 1, function(row) {
+  ci <- round(prop.test(row["relapse_180"], row["initial_cure"])$conf.int, 2)
+  return(ci[1])
+})
+studies12m$ci_180_upper <- apply(studies12m, 1, function(row) {
+  ci <- round(prop.test(row["relapse_180"], row["initial_cure"])$conf.int, 2)
+  return(ci[2])
+})
+
+
+studies12m$prop_6m<-with(studies12m,paste0(prop_180,"% [95% CI: ",ci_180_lower,"%-",ci_180_upper,"%]"))
+
+
+
+
+
+studies12m$prop_360<-round((studies12m$relapse_360/studies12m$initial_cure),2)
+
+
+# calculate the confidence interval for the proportion
+studies12m$ci_360_lower <- apply(studies12m, 1, function(row) {
+  ci <- round(prop.test(row["relapse_360"], row["initial_cure"])$conf.int, 2)
+  return(ci[1])
+})
+
+studies12m$ci_360_upper <- apply(studies12m, 1, function(row) {
+  ci <- round(prop.test(row["relapse_360"], row["initial_cure"])$conf.int, 2)
+  return(ci[2])
+})
+
+
+studies12m$prop_12m<-with(studies12m,paste0(prop_360,"% [95% CI: ",ci_360_lower,"%-",ci_360_upper,"%]"))
+
+
+
+
+studies12m$prop_total<-round((studies12m$relapse_total/studies12m$initial_cure),2)
+# calculate the proportion of relapses and confidence interval for each row
+
+#write.csv(df_6p_studies,"Studies_6plus_Est.csv")
+```
+
