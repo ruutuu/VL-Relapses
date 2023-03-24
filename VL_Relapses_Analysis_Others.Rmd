@@ -1,0 +1,102 @@
+Analysis and results:
+
+#1. Initialization: Loading libraries, functions and data
+```{r message=FALSE, warning=FALSE, include=FALSE}
+    library(readr)
+    library(readxl)
+# meta-analysis packages
+    library(meta)
+    library(metafor)
+    library(metasens) 
+# graphics packages
+    library(tidyverse)
+    library(reshape)
+    library(doBy)
+    library(stringr)
+    library(ggpubr)
+    library(patchwork)
+    library(dplyr)
+    library(data.table)
+
+
+source("C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/MA_extract_functions.R")
+
+df<-readRDS('C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/Data/VLRelapse_Dataset.RDS') #Make sure to pick up the latest data file
+
+df$decade<-ifelse(df$pub_year<1990,"80s",ifelse(df$pub_year<2000,"90s",ifelse(df$pub_year<2010,"00s","10s")))
+df$st_type<-ifelse(df$st_allocation=="Randomised","R","NR")
+df$st_allocation<-NULL
+colnames(df)[colnames(df) == "relapse_method_for_analysis"] ="rel_diag"
+colnames(df)[colnames(df) == "cases_grouped"] ="inf_type"
+length(unique(df$pub_id))
+df<-subset(df,df$initial_cure>0)
+
+bias_pval<-NULL
+```
+#Mediterranean
+
+```{r}
+df_med<-subset(df,df$st_region=="Mediterranean")
+m<- metaprop(  data = df_med,  event =relapse_180,  n=initial_cure, 
+                           method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+summary(m)
+
+
+m_drug<-update.meta(m, 
+            byvar=drugcat, 
+            comb.random = TRUE, 
+            comb.fixed = F)
+m_drug
+
+```
+##South America
+
+```{r}
+df_sa<-subset(df,df$st_region== "South America" )
+m<- metaprop(  data = df_sa,  event =relapse_180,  n=initial_cure, 
+                           method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+summary(m)
+
+
+m_drug<-update.meta(m, 
+            byvar=drugcat, 
+            comb.random = TRUE, 
+            comb.fixed = F)
+m_drug
+
+```
+
+##Central Asia
+```{r}
+df_ca<-subset(df,df$st_region=="Central Asia"  )
+m<- metaprop(  data = df_ca,  event =relapse_180,  n=initial_cure, 
+                           method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+summary(m)
+
+
+m_drug<-update.meta(m, 
+            byvar=drugcat, 
+            comb.random = TRUE, 
+            comb.fixed = F)
+m_drug
+
+```
+
+##Multi regional
+
+```{r}
+df_mr<-subset(df,df$st_region== "Multi-Regional"  )
+m<- metaprop(  data = df_mr,  event =relapse_180,  n=initial_cure, 
+                           method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
+summary(m)
+
+
+m_drug<-update.meta(m, 
+            byvar=drugcat, 
+            comb.random = TRUE, 
+            comb.fixed = F)
+m_drug
+
+```
+
+
