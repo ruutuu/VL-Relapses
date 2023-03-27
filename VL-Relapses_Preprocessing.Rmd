@@ -38,7 +38,7 @@ setwd("C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/
 #Continuous changes to the file: Missing numbers, corrections
 #Pick up latest cleaned file from Google Sheets
 #Download it and save the sheet. Read it here-->
-data <-read_excel("VL_Relapse_Dataset_24March.xlsx", sheet = "AllStudies")
+data <-read_excel("VL_Relapse_Dataset_27March.xlsx", sheet = "AllStudies")
 
 data<-data[,c("pub_id", "Inc/Excluded" ,"redcap_repeat_instance",  "pub_year" , "st_region" ,"st_total_num" ,"st_allocation",
                  "sa_intv1_drug" , "sa_intv1_dose_mgkg"  ,"sa_intv1_freq_discrete" ,  "sa_intv1_freq_new" , "sa_intv1_dura", "sa_int1_total_dose", 
@@ -201,7 +201,7 @@ colnames(df_final)[colnames(df_final) == "relapse_method_for_analysis"] ="rel_di
 colnames(df_final)[colnames(df_final) == "cases_grouped"] ="inf_type"
 length(unique(df_final$pub_id))
 
-df_final<-subset(df_final,df_final$initial_cure>0)
+chk<-subset(df_final,!df_final$initial_cure>0)
 setwd("C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/Data")
 saveRDS(df_final,'VLRelapse_Dataset.RDS')
 
