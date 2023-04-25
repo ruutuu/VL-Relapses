@@ -1,6 +1,6 @@
 Analysis and results:
 
-#1. Initialization: Loading libraries, functions and data
+#1. Initialization: Loading libraries, functions and data 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
     library(readr)
     library(readxl)
@@ -21,16 +21,11 @@ Analysis and results:
 
 source("C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/MA_extract_functions.R")
 
-df<-readRDS('C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/Data/VLRelapse_Dataset.RDS') #Make sure to pick up the latest data file
+df<-readRDS('C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/Data/VLRelapse_MainDataset.RDS')
+#Input the dataset
 
-df$decade<-ifelse(df$pub_year<1990,"80s",ifelse(df$pub_year<2000,"90s",ifelse(df$pub_year<2010,"00s","10s")))
-df$st_type<-ifelse(df$st_allocation=="Randomised","R","NR")
-df$st_allocation<-NULL
-colnames(df)[colnames(df) == "relapse_method_for_analysis"] ="rel_diag"
-colnames(df)[colnames(df) == "cases_grouped"] ="inf_type"
-length(unique(df$pub_id))
-df<-subset(df,df$initial_cure>0)
 
+#Subset studies in the ISC
 df_isc<-subset(df,df$st_region=="India Subcontinent")
 table2<-NULL
 bias_pval<-NULL
@@ -51,7 +46,7 @@ for (i in 1:17){
                            method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
                bias<-metabias(m_tmp,method.bias = "Egger",k.min=5)
                assign(paste0("m_drug",i),m_tmp)
-               bias_pval<-rbind(bias_pval,c(drug[i],bias$p.value))
+               bias_pval<-rbind(bias_pval,c(drug[i],round(bias$p.value),2))
                rm(bias,m_tmp,df_isc_tmp)
                }
                
@@ -198,12 +193,18 @@ rm(m_adj)
 metabias(m_drug15,method.bias = "Egger")
 # p-value =  0.94
 
-#m_adj<-copas(m_drug5, gamma0.range=c(-2,5), gamma1.range=c(0,2))
+#16 is Other combination drugs. Not including.
+
+
 m_unadj<-m_drug17
 cat_name=m_unadj$data$drugcat[1]
 od17<-m_extract0(m_unadj,cat_name)
 rm(m_unadj)
-metabias(m_drug17,method.bias = "Egger")
+require (binom)
+binom.confint(0, 63, method="wilson")
+
+
+
 # p-value = k small
 
 table2<-rbind(table2, od1, od2, od3, od4,od5,  od6, od7, od8, od9, od10, od11, od12, od13, od14, od15, od17)
@@ -227,7 +228,7 @@ for (i in 1:4){
                            method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
               
                bias<-metabias(m_tmp,method.bias = "Egger",k.min=5)
-               bias_pval<-rbind(bias_pval,c(rel,bias$p.value))
+               bias_pval<-rbind(bias_pval,c(rel,round(bias$p.value),2))
                
                assign(paste0("m_case",i),m_tmp)
                rm(m_tmp,df_isc_tmp,bias)}
@@ -296,7 +297,7 @@ for (i in 1:3){
                                    method="GLMM", sm = "PLOGIT", hakn = TRUE,  prediction=TRUE)
                
                bias<-metabias(m_tmp,method.bias = "Egger",k.min=5)
-               bias_pval<-rbind(bias_pval,c(rel,bias$p.value))
+               bias_pval<-rbind(bias_pval,c(rel,round(bias$p.value),2))
                
                assign(paste0("m_rel",i),m_tmp)
                rm(bias,m_tmp,df_isc_tmp)}
@@ -347,7 +348,7 @@ for (i in 1:4){
                
                
                bias<-metabias(m_tmp,method.bias = "Egger",k.min=5)
-               bias_pval<-rbind(bias_pval,c(dec,bias$p.value))
+               bias_pval<-rbind(bias_pval,c(dec,round(bias$p.value),2))
                
                assign(paste0("m_dec",i),m_tmp)
                rm(m_tmp,df_tmp,bias)}
@@ -382,7 +383,7 @@ rm(m_adj)
 
 
 
-m_table_isc<-rbind(m_table_isc, odec1, odec2, odec3, odec4)
+table2<-rbind(table2, odec1, odec2, odec3, odec4)
 rm(m_dec1, m_dec2, m_dec3, m_dec4)
 rm(odec1, odec2, odec3, odec4)
 
@@ -501,10 +502,11 @@ m_dose<-rbind(odose1,odose2,odose3, odose4)
 #Wrappers around the R base function prop.trend.test() but returns a data frame for easy data visualization.
 
 table2<-rbind(table2,m_dose)
-
+Store_table2<-table2
 ```
 ##7. Final table creation
 ```{r}
+
 
 cols.num <- c( "est0","lb0","ub0","est","lb","ub","i2","i2lb","i2ub","pi_lb","pi_ub")
 table2[cols.num] <- sapply(table2[cols.num],as.numeric)
@@ -512,6 +514,15 @@ table2[, cols.num] <- lapply(table2[, cols.num, drop = FALSE],  function(x) x * 
 
 table2[, cols.num] <- lapply(table2[, cols.num, drop = FALSE],
                              function(x) round(x,1))
+
+table2$tausq<-round(table2$tausq,1)
+drugcat_names <-read_excel("C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/Data/DrugCategories.xlsx", 
+    sheet = "drug cat full names")
+
+colnames(table2)[which(colnames(table2) == 'name')] <- 'drugcat'
+table2<-left_join(table2,drugcat_names,by="drugcat")
+table2$name<-ifelse(is.na(table2$`Drug Category`),table2$drugcat,table2$`Drug Category`)
+
 
 
 table2$unadj<-with(table2,paste0(est0,"% [95% CI: ",lb0,"%-",ub0,"%]"))
@@ -521,6 +532,8 @@ table2$tcr<-with(table2,paste0(tot,"/",cured,"/",relapse))
 
 table2<-table2[,c("name","arms","tcr","unadj","tausq","i2","adj","pred")]
 
+write.csv(table2,'C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/Results/Table2_0403.csv')
+
 ```
 
 #Meta regressions
@@ -528,13 +541,12 @@ table2<-table2[,c("name","arms","tcr","unadj","tausq","i2","adj","pred")]
 
 ```{r}
 xtab<-as.table(cbind(df_isc_lamb$relapse_180,df_isc_lamb$def_cure))
+df_isc_lamb$pub_year_scaled<-df_isc_lamb$pub_year/100
+df_isc_lamb$dose<-scale(df_isc_lamb$sa_int1_total_dose,center=TRUE, scale=TRUE)
 
 library('rstatix')
 prop_trend_test(xtab,df_isc_lamb$total_dose_cat)
 #P=0.157
-
-
-
 
 #sa_int1_total_dose CONTINUOS VARIABLE
 #total dose: Categorical
@@ -546,33 +558,94 @@ ci<-summary(model1)$coefficients[2,1]+qnorm(c(0.025,0.5,0.975))*summary(model1)$
 round(exp(ci),2)
 
 
-model1a<- glmer(cbind(relapse_180,def_cure) ~  sa_int1_total_dose + rel_diag+inf_type+(1 | id), family = binomial, data = df_isc_lamb)
-summary(model1a)
-ci<-summary(model1a)$coefficients[2,1]+qnorm(c(0.025,0.5,0.975))*summary(model1a)$coefficients[2,2]
-round(exp(ci),2)
 
-
-df_isc_lamb$pub_year_scaled<-df_isc_lamb$pub_id/100
-model1b<- glmer(cbind(relapse_180,def_cure) ~  sa_int1_total_dose + rel_diag+inf_type+ pub_year_scaled +(1 | id), family = binomial, data = df_isc_lamb)
+model1b<- glmer(cbind(relapse_180,def_cure) ~  sa_int1_total_dose +inf_type +pub_year+(1 | id), family = binomial, data = df_isc_lamb)
 summary(model1b)
 ci<-summary(model1b)$coefficients[2,1]+qnorm(c(0.025,0.5,0.975))*summary(model1b)$coefficients[2,2]
-round(exp(ci),2)
+round(exp(ci),3)
+#-------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+model2<-rma.glmm(measure = "PLO",xi=relapse_180,ni=initial_cure,data = df_isc_lamb,mods = sa_int1_total_dose)
+model2
+
+regplot(model2)
+
+model2a<-rma.glmm(measure = "PLO",xi=relapse_180,ni=initial_cure,data = df_isc_lamb,mods = ~sa_int1_total_dose+inf_type)
+regplot(model2a, mod = "sa_int1_total_dose")
+
+#---------------------------------------------------------------------------------------------------------------------------------------------
+m<- metaprop(data = df_isc_lamb,  
+                               event =relapse_180,  n=initial_cure, 
+                               method="GLMM", sm = "PLOGIT", hakn = FALSE,  prediction=TRUE)
+
+
+reg1 <- metareg(m, ~sa_int1_total_dose)
+regplot(reg1,psize ="seinv" ,atransf =transf.ilogit, xlab="Total dosage in mg/kg",  ylab="Relapse Proportion at 6 month" , las=1,col='turquoise4',xlim=c(5,15), predlim=c(0,20), labsize=0.9,bg='powderblue')
 
 
 
+reg1b <- metareg(m, formula = dose+inf_type+pub_year_scaled)
+
+regplot(reg1b,mod="sa_int1_total_dose")
+regplot(reg1b,mod="dose",psize ="vinv" ,atransf = transf.ilogit)
 ```
 ##2. PA vs LAMB regimen for ISC
 ```{r}
 
 df_isc_palamb<-subset(df_isc,df_isc$drugcat %in% c("LamB SD Mono","LamB SD Comb","LamB MD Comb", "LamB MD Mono","PA"))
-
+df_isc_palamb$pub_year_scaled<-df_isc_palamb$pub_year/1000
 df_isc_palamb$pldrug<-as.factor(ifelse(df_isc_palamb$drugcat=="PA",'pa','lamb'))
-model2<- glmer(cbind(relapse_180,def_cure) ~ pldrug+inf_type+rel_diag+(1|id) , family = binomial, data = df_isc_palamb)
+model2<- glmer(cbind(relapse_180,def_cure) ~ pldrug+(1|id) , family = binomial, data = df_isc_palamb)
 summary(model2)
 
 
 ci<-summary(model2)$coefficients[2,1]+qnorm(c(0.025,0.5,0.975))*summary(model2)$coefficients[2,2]
 
+round(exp(ci),2)
+
+
+
+
+```
+```{r}
+df_isc$def_cure<-df_isc$initial_cure-df_isc$relapse_180
+df_isc$pub_year_scaled<-df_isc$pub_year/100
+df_isc$inf_type<-relevel(df_isc$inf_type,ref="Primary")
+model1<- glmer(cbind(relapse_180,def_cure) ~ inf_type + pub_year+(1 | id), family = binomial, data = df_isc)
+summary(model1)
+ci<-summary(model1)$coefficients[4,1]+qnorm(c(0.025,0.5,0.975))*summary(model1)$coefficients[4,2]
+round(exp(ci),2)
+
+```
+
+
+```{r}
+
+library('lme4')
+df_isc$def_cure<-df_isc$initial_cure-df_isc$relapse_180
+
+df_isc_lamb<-subset(df_isc,df_isc$drugcat %in% c("LamB SD Mono","LamB SD Comb"))
+df_isc_lamb$mc<-as.factor(ifelse(df_isc_lamb$drugcat=="LamB SD Mono",'Mono','Combo'))
+df_isc_lamb$mc<-relevel(df_isc_lamb$mc,ref="Mono")
+
+model<- glmer(cbind(relapse_180,def_cure) ~ mc+inf_type+(1|id) , family = binomial, data = df_isc_lamb)
+summary(model)
+ci<-summary(model)$coefficients[2,1]+qnorm(c(0.025,0.5,0.975))*summary(model)$coefficients[2,2]
+round(exp(ci),2)
+```
+
+```{r}
+library('lme4')
+df_isc$def_cure<-df_isc$initial_cure-df_isc$relapse_180
+
+df_isc_mil<-subset(df_isc,df_isc$drugcat %in% c("Miltefosine" ,  "Miltefosine & Paromomycin"))
+df_isc_mil$mc<-as.factor(ifelse(df_isc_mil$drugcat=="Miltefosine",'Mono','Combo'))
+df_isc_mil$mc<-relevel(df_isc_mil$mc,ref="Mono")
+
+model<- glmer(cbind(relapse_180,def_cure) ~ mc+inf_type+(1|id) , family = binomial, data = df_isc_mil)
+summary(model)
+ci<-summary(model)$coefficients[2,1]+qnorm(c(0.025,0.5,0.975))*summary(model)$coefficients[2,2]
 round(exp(ci),2)
 ```
 
