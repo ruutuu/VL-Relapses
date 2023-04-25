@@ -23,14 +23,6 @@ source("C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses
 
 df<-readRDS('C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/Data/VLRelapse_Dataset.RDS') #Make sure to pick up the latest data file
 
-df$decade<-ifelse(df$pub_year<1990,"80s",ifelse(df$pub_year<2000,"90s",ifelse(df$pub_year<2010,"00s","10s")))
-df$st_type<-ifelse(df$st_allocation=="Randomised","R","NR")
-df$st_allocation<-NULL
-colnames(df)[colnames(df) == "relapse_method_for_analysis"] ="rel_diag"
-colnames(df)[colnames(df) == "cases_grouped"] ="inf_type"
-length(unique(df$pub_id))
-df<-subset(df,df$initial_cure>0)
-
 bias_pval<-NULL
 ```
 #Mediterranean
@@ -97,6 +89,13 @@ m_drug<-update.meta(m,
             comb.fixed = F)
 m_drug
 
+
+m_study<-update.meta(m, 
+            byvar=pub_id, 
+            comb.random = TRUE, 
+            comb.fixed = F)
+
+m_study
 ```
 
 

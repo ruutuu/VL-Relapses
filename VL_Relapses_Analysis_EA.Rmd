@@ -18,23 +18,26 @@ Analysis and results:
     library(dplyr)
     library(data.table)
 
-
 source("C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/MA_extract_functions.R")
 
-df<-readRDS('C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/Data/VLRelapse_Dataset.RDS') #Make sure to pick up the latest data file
+df<-readRDS('C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/Data/VLRelapse_MainDataset.RDS')
 
-df$decade<-ifelse(df$pub_year<1990,"80s",ifelse(df$pub_year<2000,"90s",ifelse(df$pub_year<2010,"00s","10s")))
-df$st_type<-ifelse(df$st_allocation=="Randomised","R","NR")
-df$st_allocation<-NULL
-colnames(df)[colnames(df) == "relapse_method_for_analysis"] ="rel_diag"
-colnames(df)[colnames(df) == "cases_grouped"] ="inf_type"
-length(unique(df$pub_id))
-df<-subset(df,df$initial_cure>0)
+
+
 
 df_ea<-subset(df,df$st_region=="Eastern Africa")
 table3<-NULL
 bias_pval<-NULL
 
+
+```
+
+EA studies without PA
+```{r}
+df_ea_noPA<-subset(df_ea, !df_ea$drugcat=="PA")
+summary(df_ea_noPA$sa_num_tx)
+sum(df_ea_noPA$sa_num_tx)
+le
 ```
 
 
@@ -250,12 +253,22 @@ rm(odec1, odec2, odec3, odec4)
 ##5 Final table creation
 ```{r}
 
+
 cols.num <- c( "est0","lb0","ub0","est","lb","ub","i2","i2lb","i2ub","pi_lb","pi_ub")
 table3[cols.num] <- sapply(table3[cols.num],as.numeric)
 table3[, cols.num] <- lapply(table3[, cols.num, drop = FALSE],  function(x) x * 100)
 
 table3[, cols.num] <- lapply(table3[, cols.num, drop = FALSE],
                              function(x) round(x,1))
+
+table3$tausq<-round(table3$tausq,1)
+drugcat_names <-read_excel("C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/Data/DrugCategories.xlsx", 
+    sheet = "drug cat full names")
+
+colnames(table3)[which(colnames(table3) == 'name')] <- 'drugcat'
+table3<-left_join(table3,drugcat_names,by="drugcat")
+table3$name<-ifelse(is.na(table3$`Drug Category`),table3$drugcat,table3$`Drug Category`)
+
 
 
 table3$unadj<-with(table3,paste0(est0,"% [95% CI: ",lb0,"%-",ub0,"%]"))
@@ -265,4 +278,19 @@ table3$tcr<-with(table3,paste0(tot,"/",cured,"/",relapse))
 
 table3<-table3[,c("name","arms","tcr","unadj","tausq","i2","adj","pred")]
 
+write.csv(table3,'C:/Users/Rutuja Chhajed/OneDrive - Nexus365/IDDO/VL/Analysis/VL-Relapses/Results/Table3_0403.csv')
+
 ```
+
+
+```{r}
+df_ea$def_cure<-df_ea$initial_cure-df_ea$relapse_180
+df_ea$pub_year_scaled<-df_ea$pub_year/1000
+df_ea$inf_type<-relevel(df_ea$inf_type,ref="Primary")
+model1<- glmer(cbind(relapse_180,def_cure) ~ inf_type +drugcat+ pub_year+ (1 | id), family = binomial, data = df_ea)
+summary(model1)
+ci<-summary(model1)$coefficients[4,1]+qnorm(c(0.025,0.5,0.975))*summary(model1)$coefficients[4,2]
+round(exp(ci),2)
+
+```
+
